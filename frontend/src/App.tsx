@@ -80,6 +80,71 @@ function ThemeToggleIcon({ theme }: { theme: ThemeMode }) {
   );
 }
 
+function HomeIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" aria-hidden="true">
+      <path d="M240-200h160v-240h160v240h160v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H480v-240h-80v240H160Zm320-350Z" />
+    </svg>
+  );
+}
+
+function HelpIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" aria-hidden="true">
+      <path d="M478-240q17 0 29.5-12.5T520-282q0-17-12.5-29.5T478-324q-17 0-29.5 12.5T436-282q0 17 12.5 29.5T478-240Zm-36-154h74q0-35 12.5-58.5T574-498q35-33 48.5-58t13.5-55q0-61-40-99.5T484-749q-56 0-95 27t-58 79l66 26q9-30 30-48t53-18q35 0 56.5 18.5T558-611q0 23-12.5 40.5T506-531q-35 30-49.5 62T442-394Zm36 314q-82 0-155-31.5t-127.5-86Q141-252 109.5-325T78-480q0-83 31.5-156t86-127.5Q250-818 323-849.5T478-881q83 0 156 31.5t127.5 86Q816-709 847.5-636T879-480q0 82-31.5 155T761-197.5Q707-143 634-111.5T478-80Zm2-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+    </svg>
+  );
+}
+
+function RobotIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" aria-hidden="true">
+      <path d="M400-480q33 0 56.5-23.5T480-560q0-33-23.5-56.5T400-640q-33 0-56.5 23.5T320-560q0 33 23.5 56.5T400-480Zm160 0q33 0 56.5-23.5T640-560q0-33-23.5-56.5T560-640q-33 0-56.5 23.5T480-560q0 33 23.5 56.5T560-480ZM320-280h320v-80H320v80Zm160-440q-17 0-28.5-11.5T440-760v-40l-50-50 28-28 62 62v56h80v-56l62-62 28 28-50 50v40q0 17-11.5 28.5T560-720h-80Zm-200 80h400q33 0 56.5 23.5T760-560v280q0 33-23.5 56.5T680-200h-40v80h-80v-80H400v80h-80v-80h-40q-33 0-56.5-23.5T200-280v-280q0-33 23.5-56.5T280-640Z" />
+    </svg>
+  );
+}
+
+function ActionButtons({
+  className,
+  theme,
+  nextThemeLabel,
+  onGoHome,
+  onOpenHelp,
+  onOpenRobot,
+  onToggleTheme,
+}: {
+  className: string;
+  theme: ThemeMode;
+  nextThemeLabel: ThemeMode;
+  onGoHome: () => void;
+  onOpenHelp: () => void;
+  onOpenRobot: () => void;
+  onToggleTheme: () => void;
+}) {
+  return (
+    <nav className={className} aria-label="Actions">
+      <button type="button" className="home-button" onClick={onGoHome} aria-label="Home" title="Home">
+        <HomeIcon />
+      </button>
+      <button type="button" className="help-button" onClick={onOpenHelp} aria-label="Help" title="Help">
+        <HelpIcon />
+      </button>
+      <button type="button" className="robot-button" onClick={onOpenRobot} aria-label="GitHub" title="GitHub">
+        <RobotIcon />
+      </button>
+      <button
+        type="button"
+        className="theme-toggle"
+        onClick={onToggleTheme}
+        aria-label={`Switch to ${nextThemeLabel} mode`}
+        title={`Switch to ${nextThemeLabel} mode`}
+      >
+        <ThemeToggleIcon theme={theme} />
+      </button>
+    </nav>
+  );
+}
+
 function parseErrorMessage(error: unknown, fallback: string): string {
   if (
     typeof error === "object" &&
@@ -958,6 +1023,9 @@ export default function App() {
     setQuery(options?.queryValue ?? query);
     setIsSuggestionsOpen(false);
     hasKeyboardSuggestionSelection.current = false;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    });
   }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -1108,19 +1176,34 @@ export default function App() {
     setTheme((previous) => (previous === "light" ? "dark" : "light"));
   }
 
+  function handleGoHome(): void {
+    setLookupTargets([]);
+    setLookupError(null);
+    setSearchError(null);
+    setIsSuggestionsOpen(false);
+  }
+
+  function handleOpenHelp(): void {
+    window.open("https://github.com/aryan-cs/hackaplan#readme", "_blank", "noopener,noreferrer");
+  }
+
+  function handleOpenRobot(): void {
+    window.open("https://github.com/aryan-cs/hackaplan", "_blank", "noopener,noreferrer");
+  }
+
   const nextThemeLabel = theme === "light" ? "dark" : "light";
 
   return (
     <div className={hasActiveSearch ? "app results-mode" : "app home-mode"}>
-      <button
-        type="button"
-        className="theme-toggle"
-        onClick={handleThemeToggle}
-        aria-label={`Switch to ${nextThemeLabel} mode`}
-        title={`Switch to ${nextThemeLabel} mode`}
-      >
-        <ThemeToggleIcon theme={theme} />
-      </button>
+      <ActionButtons
+        className="desktop-floating-actions"
+        theme={theme}
+        nextThemeLabel={nextThemeLabel}
+        onGoHome={handleGoHome}
+        onOpenHelp={handleOpenHelp}
+        onOpenRobot={handleOpenRobot}
+        onToggleTheme={handleThemeToggle}
+      />
 
       {!hasActiveSearch ? (
         <main className="home-layout">
@@ -1128,6 +1211,15 @@ export default function App() {
           <h1>Find winning ideas.</h1>
 
           <form className="search-form" onSubmit={handleSearchSubmit}>
+            <ActionButtons
+              className="mobile-action-bar"
+              theme={theme}
+              nextThemeLabel={nextThemeLabel}
+              onGoHome={handleGoHome}
+              onOpenHelp={handleOpenHelp}
+              onOpenRobot={handleOpenRobot}
+              onToggleTheme={handleThemeToggle}
+            />
             <div className="search-input-shell">
               <input
                 type="text"
@@ -1196,6 +1288,15 @@ export default function App() {
         <main className="results-layout">
           <header className="results-search-header">
             <form className="search-form compact" onSubmit={handleSearchSubmit}>
+              <ActionButtons
+                className="mobile-action-bar"
+                theme={theme}
+                nextThemeLabel={nextThemeLabel}
+                onGoHome={handleGoHome}
+                onOpenHelp={handleOpenHelp}
+                onOpenRobot={handleOpenRobot}
+                onToggleTheme={handleThemeToggle}
+              />
               <div className="search-input-shell">
                 <input
                   type="text"
