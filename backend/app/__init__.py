@@ -1,0 +1,1 @@
+"""Hackaplan backend package."""

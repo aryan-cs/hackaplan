@@ -1,0 +1,17 @@
+[Unit]
+Description=Hackaplan FastAPI Backend
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/hackaplan/backend
+Environment="HACKAPLAN_DATABASE_PATH=/var/lib/hackaplan/hackaplan.db"
+Environment="HACKAPLAN_CORS_ORIGINS=https://<your-github-username>.github.io"
+Environment="HACKAPLAN_IP_HASH_SALT=<replace-with-random-secret>"
+ExecStart=/opt/hackaplan/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

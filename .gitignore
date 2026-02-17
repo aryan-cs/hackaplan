@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Local envs and data
+.env
+backend/data/
+*.db
+
+# macOS
+.DS_Store
