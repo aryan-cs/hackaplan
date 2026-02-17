@@ -96,6 +96,9 @@ def create_app() -> FastAPI:
 
         active_lookup = db.get_latest_active_lookup_for_url(normalized)
         if active_lookup is not None:
+            if active_lookup.get("status") == "queued":
+                # Ensure a recovered/deduped queued lookup is actually present in the in-memory worker queue.
+                await orchestrator.enqueue_lookup(active_lookup["id"])
             return LookupCreateResponse(lookup_id=active_lookup["id"], status=active_lookup["status"])
 
         if settings.lookup_result_cache_ttl_seconds > 0:

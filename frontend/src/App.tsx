@@ -1,6 +1,14 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 
-import { buildLookupWebSocketUrl, createLookup, getLookup, getSnapshotManifest, getSnapshotShard, searchHackathons } from "./api";
+import {
+  buildLookupWebSocketUrl,
+  createLookup,
+  getLookup,
+  getSnapshotManifest,
+  getSnapshotShard,
+  isLiveLookupEnabled,
+  searchHackathons,
+} from "./api";
 import type {
   HackathonResult,
   HackathonSearchSuggestion,
@@ -27,6 +35,7 @@ type SearchAutocompleteOption =
 type ThemeMode = "light" | "dark";
 
 const THEME_STORAGE_KEY = "hackaplan-theme";
+const LIVE_LOOKUPS_ENABLED = isLiveLookupEnabled();
 
 function getInitialTheme(): ThemeMode {
   if (typeof window === "undefined") {
@@ -382,9 +391,11 @@ function WinnerCard({
 function LookupResultSection({
   suggestion,
   snapshotManifest,
+  liveLookupsEnabled,
 }: {
   suggestion: HackathonSearchSuggestion;
   snapshotManifest: SnapshotManifestV1 | null;
+  liveLookupsEnabled: boolean;
 }) {
   const [lookupId, setLookupId] = useState<string | null>(null);
   const [lookup, setLookup] = useState<LookupJobResponse | null>(null);
@@ -397,7 +408,8 @@ function LookupResultSection({
   const [snapshotStatus, setSnapshotStatus] = useState<"idle" | "loading" | "loaded" | "missing" | "error">("idle");
 
   const isTerminal = lookup?.status === "completed" || lookup?.status === "failed";
-  const isLookupRunning = isLookupSubmitting || lookup?.status === "queued" || lookup?.status === "started";
+  const isLookupRunning =
+    liveLookupsEnabled && (isLookupSubmitting || lookup?.status === "queued" || lookup?.status === "started");
 
   useEffect(() => {
     let cancelled = false;
@@ -445,6 +457,16 @@ function LookupResultSection({
   }, [snapshotManifest, suggestion.hackathon_url]);
 
   useEffect(() => {
+    if (!liveLookupsEnabled) {
+      setIsLookupSubmitting(false);
+      setLookupError(null);
+      setLookupId(null);
+      setLookup(null);
+      setProgressEvents([]);
+      setIsWebSocketConnected(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function startLookupForSection(): Promise<void> {
@@ -485,10 +507,10 @@ function LookupResultSection({
     return () => {
       cancelled = true;
     };
-  }, [suggestion.hackathon_url]);
+  }, [liveLookupsEnabled, suggestion.hackathon_url]);
 
   useEffect(() => {
-    if (!lookupId || isTerminal || isWebSocketConnected) {
+    if (!liveLookupsEnabled || !lookupId || isTerminal || isWebSocketConnected) {
       return;
     }
 
@@ -510,10 +532,10 @@ function LookupResultSection({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [isTerminal, isWebSocketConnected, lookupId]);
+  }, [isTerminal, isWebSocketConnected, liveLookupsEnabled, lookupId]);
 
   useEffect(() => {
-    if (!lookupId || isTerminal) {
+    if (!liveLookupsEnabled || !lookupId || isTerminal) {
       return;
     }
 
@@ -565,7 +587,7 @@ function LookupResultSection({
       setIsWebSocketConnected(false);
       socket.close();
     };
-  }, [lookupId, isTerminal]);
+  }, [lookupId, isTerminal, liveLookupsEnabled]);
 
   const streamedWinners = useMemo(() => {
     const winnersByUrl = new Map<string, WinnerProject>();
@@ -660,12 +682,22 @@ function LookupResultSection({
 
   const displayHackathonName = result ? result.hackathon.name : suggestion.title;
   const displayHackathonUrl = result ? result.hackathon.url : suggestion.hackathon_url;
-  const snapshotHintVisible = snapshotStatus === "loaded" && snapshotResult !== null && liveResult === null && isLookupRunning;
-  const liveFailureMessage = lookup?.status === "failed" ? lookup.error?.message ?? "Lookup failed unexpectedly." : lookupError;
+  const snapshotHintVisible =
+    liveLookupsEnabled && snapshotStatus === "loaded" && snapshotResult !== null && liveResult === null && isLookupRunning;
+  const liveFailureMessage =
+    liveLookupsEnabled && (lookup?.status === "failed" || lookupError)
+      ? lookup?.error?.message ?? lookupError ?? "Lookup failed unexpectedly."
+      : null;
   const hasSnapshotFallback = snapshotResult !== null;
-  const showEmptyState = result !== null && result.winners.length === 0 && !isLookupRunning;
+  const showEmptyState = result !== null && result.winners.length === 0 && !isLookupRunning && snapshotStatus !== "loading";
+  const showSnapshotMiss =
+    !liveLookupsEnabled && snapshotStatus === "missing" && snapshotResult === null && visibleWinners.length === 0;
+  const showSnapshotError =
+    !liveLookupsEnabled && snapshotStatus === "error" && snapshotResult === null && visibleWinners.length === 0;
+  const showSnapshotLoading =
+    !liveLookupsEnabled && (snapshotStatus === "idle" || snapshotStatus === "loading") && visibleWinners.length === 0;
   const showPrimarySpinner =
-    isLookupRunning &&
+    (isLookupRunning || showSnapshotLoading) &&
     visibleWinners.length === 0 &&
     !(snapshotStatus === "loaded" && snapshotResult !== null && snapshotResult.winners.length > 0);
 
@@ -690,7 +722,11 @@ function LookupResultSection({
             {result.hackathon.scanned_pages} page(s).
           </p>
         ) : (
-          <p>{visibleWinners.length} winning project(s) loaded so far. More may appear while scanning.</p>
+          <p>
+            {liveLookupsEnabled
+              ? `${visibleWinners.length} winning project(s) loaded so far. More may appear while scanning.`
+              : "Loading cached winners..."}
+          </p>
         )}
         {snapshotHintVisible ? (
           <p className="snapshot-note">
@@ -704,6 +740,12 @@ function LookupResultSection({
         <p className="inline-warning">Live refresh failed. Showing snapshot data. Details: {liveFailureMessage}</p>
       ) : null}
       {liveFailureMessage && !hasSnapshotFallback ? <p className="inline-error">{liveFailureMessage}</p> : null}
+      {showSnapshotMiss ? (
+        <p className="inline-warning">
+          This hackathon is not in the published snapshot cache yet. Add it via your manual snapshot export and redeploy GitHub Pages.
+        </p>
+      ) : null}
+      {showSnapshotError ? <p className="inline-error">Unable to load cached snapshot for this hackathon.</p> : null}
 
       {showPrimarySpinner ? (
         <section className="inline-spinner-only lookup-section-spinner">
@@ -1220,7 +1262,11 @@ export default function App() {
           {lookupTargets.map((target, index) => (
             <div key={target.hackathon_url}>
               {index > 0 ? <hr className="lookup-divider" /> : null}
-              <LookupResultSection suggestion={target} snapshotManifest={snapshotManifest} />
+              <LookupResultSection
+                suggestion={target}
+                snapshotManifest={snapshotManifest}
+                liveLookupsEnabled={LIVE_LOOKUPS_ENABLED}
+              />
             </div>
           ))}
         </main>

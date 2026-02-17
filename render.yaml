@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: hackaplan-api
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: HACKAPLAN_DATABASE_PATH
+        value: /tmp/hackaplan.db
+      - key: HACKAPLAN_CORS_ORIGINS
+        sync: false
+      - key: HACKAPLAN_IP_HASH_SALT
+        sync: false
+      - key: HACKAPLAN_RATE_LIMIT_ENABLED
+        value: "false"
+      - key: HACKAPLAN_LOOKUP_WORKER_CONCURRENCY
+        value: "1"
+      - key: HACKAPLAN_PROJECT_FETCH_CONCURRENCY
+        value: "2"

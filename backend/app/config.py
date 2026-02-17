@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     job_timeout_seconds: int = 300
     lookup_result_cache_ttl_seconds: int = 1800
+    lookup_worker_concurrency: int = 4
 
     rate_limit_enabled: bool = False
     rate_limit_hourly: int = 3
@@ -47,7 +48,7 @@ class Settings(BaseSettings):
             raise ValueError("max_retries must be >= 1")
         return value
 
-    @field_validator("project_max_retries", "project_fetch_concurrency")
+    @field_validator("project_max_retries", "project_fetch_concurrency", "lookup_worker_concurrency")
     @classmethod
     def validate_positive_int_settings(cls, value: int) -> int:
         if value < 1:

@@ -23,33 +23,54 @@ class JobOrchestrator:
 
         # asyncio primitives must be created on the running app loop, not at import time.
         self._queue: asyncio.Queue[str] | None = None
-        self._worker_task: asyncio.Task[None] | None = None
+        self._worker_tasks: list[asyncio.Task[None]] = []
+        self._queued_lookup_ids: set[str] = set()
+        self._queue_state_lock: asyncio.Lock | None = None
         self._subscribers: dict[str, set[WebSocket]] = defaultdict(set)
         self._subscribers_lock: asyncio.Lock | None = None
 
     async def start(self) -> None:
-        if self._worker_task is not None:
+        if self._worker_tasks:
             return
         self._queue = asyncio.Queue()
+        self._queue_state_lock = asyncio.Lock()
+        self._queued_lookup_ids = set()
         self._subscribers_lock = asyncio.Lock()
-        self._worker_task = asyncio.create_task(self._worker_loop(), name="lookup-worker")
+
+        # Recover pending jobs so app restarts do not leave lookups stuck in queued/started forever.
+        for lookup_id in self.db.list_pending_lookup_ids():
+            await self.enqueue_lookup(lookup_id)
+
+        worker_count = max(1, self.settings.lookup_worker_concurrency)
+        self._worker_tasks = [
+            asyncio.create_task(self._worker_loop(), name=f"lookup-worker-{index + 1}")
+            for index in range(worker_count)
+        ]
 
     async def stop(self) -> None:
-        if self._worker_task is None:
+        if not self._worker_tasks:
             return
-        self._worker_task.cancel()
-        try:
-            await self._worker_task
-        except asyncio.CancelledError:
-            pass
-        self._worker_task = None
+        for worker_task in self._worker_tasks:
+            worker_task.cancel()
+        await asyncio.gather(*self._worker_tasks, return_exceptions=True)
+        self._worker_tasks = []
         self._queue = None
+        self._queued_lookup_ids = set()
+        self._queue_state_lock = None
         self._subscribers_lock = None
         self._subscribers.clear()
 
     async def enqueue_lookup(self, lookup_id: str) -> None:
         if self._queue is None:
             raise RuntimeError("Lookup worker has not been started.")
+        if self._queue_state_lock is None:
+            raise RuntimeError("Lookup worker has not been started.")
+
+        async with self._queue_state_lock:
+            if lookup_id in self._queued_lookup_ids:
+                return
+            self._queued_lookup_ids.add(lookup_id)
+
         await self._queue.put(lookup_id)
 
     async def subscribe(self, lookup_id: str, websocket: WebSocket) -> None:
@@ -102,6 +123,9 @@ class JobOrchestrator:
         while True:
             lookup_id = await self._queue.get()
             try:
+                if self._queue_state_lock is not None:
+                    async with self._queue_state_lock:
+                        self._queued_lookup_ids.discard(lookup_id)
                 await self._process_lookup(lookup_id)
             finally:
                 self._queue.task_done()

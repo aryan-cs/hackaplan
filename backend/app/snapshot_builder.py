@@ -208,6 +208,7 @@ async def build_snapshot_from_targets(
             hackathon = result.get("hackathon", {})
             entry = {
                 "hackathon_url": hackathon_url,
+                "hackathon_title": hackathon.get("name") if isinstance(hackathon.get("name"), str) else None,
                 "shard_path": shard_path,
                 "generated_at": shard_generated_at,
                 "winner_count": int(hackathon.get("winner_count") or len(result.get("winners", []))),

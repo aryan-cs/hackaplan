@@ -99,6 +99,7 @@ export interface HackathonSearchResponse {
 
 export interface SnapshotManifestEntryV1 {
   hackathon_url: string;
+  hackathon_title?: string;
   shard_path: string;
   generated_at: string;
   winner_count: number;

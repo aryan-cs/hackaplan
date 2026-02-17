@@ -53,10 +53,12 @@ a:hover {
   min-height: 100vh;
 }
 
+.home-button,
+.help-button,
+.robot-button,
 .theme-toggle {
   position: fixed;
   top: 16px;
-  right: 16px;
   z-index: 40;
   width: 44px;
   height: 44px;
@@ -73,6 +75,25 @@ a:hover {
   transition: color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
+.home-button {
+  left: 16px;
+}
+
+.help-button {
+  right: 120px;
+}
+
+.robot-button {
+  right: 68px;
+}
+
+.theme-toggle {
+  right: 16px;
+}
+
+.home-button:hover,
+.help-button:hover,
+.robot-button:hover,
 .theme-toggle:hover {
   border-color: rgb(11 87 208 / 16%);
   background: rgb(11 87 208 / 8%);
@@ -80,11 +101,17 @@ a:hover {
   box-shadow: 0 4px 14px #0f172620;
 }
 
+.home-button:focus-visible,
+.help-button:focus-visible,
+.robot-button:focus-visible,
 .theme-toggle:focus-visible {
   outline: 2px solid #7fb1ef;
   outline-offset: 2px;
 }
 
+.home-button svg,
+.help-button svg,
+.robot-button svg,
 .theme-toggle svg {
   display: block;
   flex-shrink: 0;
@@ -767,6 +794,9 @@ a:hover {
   }
 }
 
+:root[data-theme="dark"] .home-button,
+:root[data-theme="dark"] .help-button,
+:root[data-theme="dark"] .robot-button,
 :root[data-theme="dark"] .theme-toggle {
   border-color: transparent;
   background: transparent;
@@ -774,6 +804,9 @@ a:hover {
   box-shadow: none;
 }
 
+:root[data-theme="dark"] .home-button:hover,
+:root[data-theme="dark"] .help-button:hover,
+:root[data-theme="dark"] .robot-button:hover,
 :root[data-theme="dark"] .theme-toggle:hover {
   border-color: rgb(214 220 230 / 20%);
   background: rgb(214 220 230 / 10%);
@@ -781,6 +814,9 @@ a:hover {
   box-shadow: 0 4px 14px #0000004a;
 }
 
+:root[data-theme="dark"] .home-button:focus-visible,
+:root[data-theme="dark"] .help-button:focus-visible,
+:root[data-theme="dark"] .robot-button:focus-visible,
 :root[data-theme="dark"] .theme-toggle:focus-visible {
   outline-color: #c3c9d2;
 }
@@ -950,11 +986,29 @@ a:hover {
 }
 
 @media (max-width: 720px) {
+  .home-button,
+  .help-button,
+  .robot-button,
   .theme-toggle {
     top: 12px;
-    right: 12px;
     width: 40px;
     height: 40px;
+  }
+
+  .home-button {
+    left: 12px;
+  }
+
+  .help-button {
+    right: 108px;
+  }
+
+  .robot-button {
+    right: 60px;
+  }
+
+  .theme-toggle {
+    right: 12px;
   }
 
   .home-layout {

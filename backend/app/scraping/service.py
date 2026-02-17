@@ -108,89 +108,25 @@ class DevpostScraper:
         should_run_deep_fallback = winners_are_announced(hackathon_html)
         gallery_url = resolve_gallery_url(normalized_hackathon_url, hackathon_html)
 
-        all_candidates = []
-        winner_candidates = []
+        all_candidates: list[WinnerCandidate] = []
         scanned_pages = 0
         scanned_projects = 0
+        winners: list[dict] = []
 
         visited_pages: set[str] = set()
         page_url: str | None = gallery_url
+        found_gallery_winners = False
 
-        while page_url and page_url not in visited_pages:
-            visited_pages.add(page_url)
+        fetch_semaphore = asyncio.Semaphore(self.settings.project_fetch_concurrency)
+        pending_scrape_tasks: set[asyncio.Task[dict | None]] = set()
+        scheduled_project_urls: set[str] = set()
+        total_candidates_scheduled = 0
 
-            page_html = await self.http_client.fetch_text(page_url)
-            parsed_page = parse_gallery_page(page_url, page_html)
-
-            scanned_pages += 1
-            scanned_projects += parsed_page.scanned_projects
-
-            all_candidates.extend(parsed_page.all_entries)
-
-            for entry in parsed_page.winner_entries:
-                winner_candidates.append(entry)
-                await progress_callback(
-                    "winner_project_found",
-                    {
-                        "project_title": entry.project_title,
-                        "project_url": entry.project_url,
-                        "software_id": entry.software_id,
-                        "preview_image_url": entry.preview_image_url,
-                    },
-                )
-
-            await progress_callback(
-                "gallery_page_scanned",
-                {
-                    "page_url": page_url,
-                    "page_number": scanned_pages,
-                    "scanned_projects": parsed_page.scanned_projects,
-                    "winners_found_on_page": len(parsed_page.winner_entries),
-                    "next_page_url": parsed_page.next_page_url,
-                },
-            )
-
-            page_url = parsed_page.next_page_url
-
-        unique_all_candidates = []
-        seen_project_urls: set[str] = set()
-        for candidate in all_candidates:
-            if candidate.project_url in seen_project_urls:
-                continue
-            seen_project_urls.add(candidate.project_url)
-            unique_all_candidates.append(candidate)
-
-        unique_winners = []
-        seen_project_urls: set[str] = set()
-        for candidate in winner_candidates:
-            if candidate.project_url in seen_project_urls:
-                continue
-            seen_project_urls.add(candidate.project_url)
-            unique_winners.append(candidate)
-
-        candidate_list = unique_winners
-        requires_prize_confirmation = False
-        if not candidate_list and should_run_deep_fallback:
-            candidate_list = unique_all_candidates
-            requires_prize_confirmation = True
-            await progress_callback(
-                "winner_detection_fallback",
-                {
-                    "reason": "gallery_badges_missing",
-                    "candidate_projects": len(candidate_list),
-                },
-            )
-        elif not candidate_list:
-            await progress_callback(
-                "winners_not_announced",
-                {
-                    "message": "Hackathon page indicates winners are not announced yet.",
-                },
-            )
-
-        winners: list[dict] = []
-
-        async def scrape_candidate(candidate: WinnerCandidate) -> dict | None:
+        async def scrape_candidate(
+            candidate: WinnerCandidate,
+            *,
+            requires_prize_confirmation: bool,
+        ) -> dict | None:
             project_html = await self.http_client.fetch_text_with_options(
                 candidate.project_url,
                 timeout_seconds=self.settings.project_request_timeout_seconds,
@@ -233,41 +169,143 @@ class DevpostScraper:
                 "project": project,
             }
 
-        fetch_semaphore = asyncio.Semaphore(self.settings.project_fetch_concurrency)
-
-        async def scrape_candidate_with_limit(candidate: WinnerCandidate) -> dict | None:
+        async def scrape_candidate_with_limit(
+            candidate: WinnerCandidate,
+            *,
+            requires_prize_confirmation: bool,
+        ) -> dict | None:
             async with fetch_semaphore:
-                return await scrape_candidate(candidate)
+                return await scrape_candidate(
+                    candidate,
+                    requires_prize_confirmation=requires_prize_confirmation,
+                )
 
-        tasks = [asyncio.create_task(scrape_candidate_with_limit(candidate)) for candidate in candidate_list]
+        def schedule_candidate(
+            candidate: WinnerCandidate,
+            *,
+            requires_prize_confirmation: bool,
+        ) -> None:
+            nonlocal total_candidates_scheduled
+            if candidate.project_url in scheduled_project_urls:
+                return
+
+            scheduled_project_urls.add(candidate.project_url)
+            total_candidates_scheduled += 1
+            pending_scrape_tasks.add(
+                asyncio.create_task(
+                    scrape_candidate_with_limit(
+                        candidate,
+                        requires_prize_confirmation=requires_prize_confirmation,
+                    )
+                )
+            )
+
+        async def drain_completed_scrapes(*, wait_for_all: bool) -> None:
+            while pending_scrape_tasks:
+                done = {task for task in pending_scrape_tasks if task.done()}
+                if not done:
+                    if wait_for_all:
+                        done, _ = await asyncio.wait(
+                            pending_scrape_tasks,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                    else:
+                        break
+
+                for task in done:
+                    pending_scrape_tasks.remove(task)
+                    candidate_result = task.result()
+                    if candidate_result is None:
+                        continue
+
+                    project = candidate_result["project"]
+                    winners.append(project)
+                    winner_index = len(winners)
+
+                    await progress_callback(
+                        "winner_project_scraped",
+                        {
+                            "index": winner_index,
+                            "total": max(total_candidates_scheduled, winner_index),
+                            "project_title": project["project_title"],
+                            "project_url": project["project_url"],
+                            "prize_count": len(project["prizes"]),
+                            "winner_project": project,
+                        },
+                    )
 
         try:
-            for task in asyncio.as_completed(tasks):
-                candidate_result = await task
-                if candidate_result is None:
-                    continue
+            while page_url and page_url not in visited_pages:
+                visited_pages.add(page_url)
 
-                project = candidate_result["project"]
-                winners.append(project)
-                winner_index = len(winners)
+                page_html = await self.http_client.fetch_text(page_url)
+                parsed_page = parse_gallery_page(page_url, page_html)
+
+                scanned_pages += 1
+                scanned_projects += parsed_page.scanned_projects
+                all_candidates.extend(parsed_page.all_entries)
+
+                for entry in parsed_page.winner_entries:
+                    found_gallery_winners = True
+                    await progress_callback(
+                        "winner_project_found",
+                        {
+                            "project_title": entry.project_title,
+                            "project_url": entry.project_url,
+                            "software_id": entry.software_id,
+                            "preview_image_url": entry.preview_image_url,
+                        },
+                    )
+                    schedule_candidate(entry, requires_prize_confirmation=False)
 
                 await progress_callback(
-                    "winner_project_scraped",
+                    "gallery_page_scanned",
                     {
-                        "index": winner_index,
-                        "total": len(candidate_list),
-                        "project_title": project["project_title"],
-                        "project_url": project["project_url"],
-                        "prize_count": len(project["prizes"]),
-                        "winner_project": project,
+                        "page_url": page_url,
+                        "page_number": scanned_pages,
+                        "scanned_projects": parsed_page.scanned_projects,
+                        "winners_found_on_page": len(parsed_page.winner_entries),
+                        "next_page_url": parsed_page.next_page_url,
                     },
                 )
+                await drain_completed_scrapes(wait_for_all=False)
+
+                page_url = parsed_page.next_page_url
+
+            if not found_gallery_winners and should_run_deep_fallback:
+                unique_all_candidates: list[WinnerCandidate] = []
+                seen_project_urls: set[str] = set()
+                for candidate in all_candidates:
+                    if candidate.project_url in seen_project_urls:
+                        continue
+                    seen_project_urls.add(candidate.project_url)
+                    unique_all_candidates.append(candidate)
+
+                await progress_callback(
+                    "winner_detection_fallback",
+                    {
+                        "reason": "gallery_badges_missing",
+                        "candidate_projects": len(unique_all_candidates),
+                    },
+                )
+                for candidate in unique_all_candidates:
+                    schedule_candidate(candidate, requires_prize_confirmation=True)
+            elif not found_gallery_winners:
+                await progress_callback(
+                    "winners_not_announced",
+                    {
+                        "message": "Hackathon page indicates winners are not announced yet.",
+                    },
+                )
+
+            await drain_completed_scrapes(wait_for_all=True)
         finally:
-            for task in tasks:
+            pending_tasks = list(pending_scrape_tasks)
+            for task in pending_tasks:
                 if not task.done():
                     task.cancel()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+            if pending_tasks:
+                await asyncio.gather(*pending_tasks, return_exceptions=True)
 
         if scanned_pages == 0:
             raise ParseAppError("Unable to locate or parse the project gallery page")

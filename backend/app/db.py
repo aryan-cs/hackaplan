@@ -215,6 +215,23 @@ class Database:
             return None
         return dict(row)
 
+    def list_pending_lookup_ids(self) -> list[str]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT id
+                    FROM lookup_jobs
+                    WHERE status IN ('queued', 'started')
+                    ORDER BY created_at ASC
+                    """
+                ).fetchall()
+            finally:
+                conn.close()
+
+        return [str(row["id"]) for row in rows]
+
     def get_latest_active_lookup_for_url(self, hackathon_url: str) -> dict[str, Any] | None:
         with self._lock:
             conn = self._connect()
@@ -225,7 +242,7 @@ class Database:
                     FROM lookup_jobs
                     WHERE hackathon_url = ?
                       AND status IN ('queued', 'started')
-                    ORDER BY created_at DESC
+                    ORDER BY created_at ASC
                     LIMIT 1
                     """,
                     (hackathon_url,),

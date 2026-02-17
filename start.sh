@@ -101,7 +101,9 @@ backend_pid=$!
 echo "Starting frontend on http://localhost:${FRONTEND_PORT}"
 (
   cd "${FRONTEND_DIR}"
-  VITE_API_BASE_URL="${API_BASE_URL}" npm run dev -- --host 0.0.0.0 --port "${FRONTEND_PORT}"
+  VITE_API_BASE_URL="${API_BASE_URL}" \
+    VITE_ENABLE_LIVE_LOOKUPS="${VITE_ENABLE_LIVE_LOOKUPS:-true}" \
+    npm run dev -- --host 0.0.0.0 --port "${FRONTEND_PORT}"
 ) &
 frontend_pid=$!
 

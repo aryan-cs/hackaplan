@@ -6,6 +6,7 @@ from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 
 from app.config import get_settings
+from app.db import Database
 from app.main import create_app
 
 
@@ -99,4 +100,51 @@ async def test_create_lookup_reuses_recent_completed_job(monkeypatch: pytest.Mon
 
             assert second_payload["lookup_id"] == lookup_id
             assert second_payload["status"] == "completed"
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_queued_lookup_is_recovered_on_app_start(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    db_path = tmp_path / "recover-queued.db"
+    monkeypatch.setenv("HACKAPLAN_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("HACKAPLAN_IP_HASH_SALT", "recover-queued-salt")
+    monkeypatch.setenv("HACKAPLAN_RATE_LIMIT_HOURLY", "50")
+    monkeypatch.setenv("HACKAPLAN_RATE_LIMIT_DAILY", "500")
+    monkeypatch.setenv("HACKAPLAN_LOOKUP_RESULT_CACHE_TTL_SECONDS", "3600")
+    get_settings.cache_clear()
+
+    lookup_id = "recoverqueuedlookupid"
+    hackathon_url = "https://recover-me.devpost.com"
+    db = Database(db_path)
+    db.init_schema()
+    db.create_lookup_job(lookup_id, hackathon_url)
+    db.insert_progress_event(lookup_id, "queued", {"lookup_id": lookup_id, "hackathon_url": hackathon_url})
+
+    app = create_app()
+
+    async def fake_scrape(recovered_hackathon_url: str, progress_callback):
+        await progress_callback("gallery_page_scanned", {"page_number": 1, "scanned_projects": 0, "winners_found_on_page": 0})
+        return _fake_result(recovered_hackathon_url)
+
+    app.state.orchestrator.scraper.scrape_hackathon = fake_scrape
+
+    transport = ASGITransport(app=app)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            completed = False
+            for _ in range(40):
+                lookup = await client.get(f"/api/v1/lookups/{lookup_id}")
+                assert lookup.status_code == 200
+                payload = lookup.json()
+                if payload["status"] == "completed":
+                    completed = True
+                    break
+                await asyncio.sleep(0.05)
+            assert completed
+
+            deduped = await client.post("/api/v1/lookups", json={"hackathon_url": hackathon_url})
+            assert deduped.status_code == 200
+            deduped_payload = deduped.json()
+            assert deduped_payload["lookup_id"] == lookup_id
+            assert deduped_payload["status"] == "completed"
     get_settings.cache_clear()

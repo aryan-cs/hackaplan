@@ -144,6 +144,7 @@ def main() -> None:
         winners = result.get("winners", []) if isinstance(result.get("winners"), list) else []
         entry = {
             "hackathon_url": hackathon_url,
+            "hackathon_title": hackathon.get("name") if isinstance(hackathon.get("name"), str) else None,
             "shard_path": shard_path,
             "generated_at": shard_generated_at,
             "winner_count": int(hackathon.get("winner_count") or len(winners)),
