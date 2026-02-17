@@ -1,8 +1,9 @@
 name: Frontend GitHub Pages
 
 on:
+  workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
     paths:
       - "frontend/**"
       - ".github/workflows/frontend-pages.yml"
