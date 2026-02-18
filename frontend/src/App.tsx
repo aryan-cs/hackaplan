@@ -1,4 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import {
   buildLookupWebSocketUrl,
@@ -13,6 +14,7 @@ import type {
   HackathonResult,
   HackathonSearchSuggestion,
   LookupJobResponse,
+  PrizeAward,
   ProgressEvent,
   SnapshotManifestV1,
   WinnerProject,
@@ -33,9 +35,84 @@ type SearchAutocompleteOption =
     };
 
 type ThemeMode = "light" | "dark";
+type SearchCommandMode = "hackathons" | "find";
 
 const THEME_STORAGE_KEY = "hackaplan-theme";
 const LIVE_LOOKUPS_ENABLED = isLiveLookupEnabled();
+const FIND_LOOKUP_POLL_INTERVAL_MS = 1400;
+const FIND_LOOKUP_TIMEOUT_MS = 60_000;
+
+const FIND_TRACK_PRIZE_HACKATHONS: HackathonSearchSuggestion[] = [
+  { title: "Cal Hacks 12.0", hackathon_url: "https://cal-hacks-12-0.devpost.com/" },
+  { title: "Cal Hacks 11.0", hackathon_url: "https://cal-hacks-11-0.devpost.com/" },
+  { title: "Cal Hacks 10.0", hackathon_url: "https://cal-hacks-10.devpost.com/" },
+  { title: "Cal Hacks 9.0", hackathon_url: "https://calhacks90.devpost.com/" },
+  { title: "Cal Hacks 8.0", hackathon_url: "https://cal-hacks-8.devpost.com/" },
+  { title: "Cal Hacks 6.0", hackathon_url: "https://cal-hacks-6.devpost.com/" },
+  { title: "Cal Hacks 4.0", hackathon_url: "https://calhacks4.devpost.com/" },
+  { title: "Cal Hacks 2.0", hackathon_url: "https://calhacks2.devpost.com/" },
+  { title: "HackIllinois 2025", hackathon_url: "https://hackillinois-2025.devpost.com/" },
+  { title: "HackIllinois 2024", hackathon_url: "https://hackillinois-2024.devpost.com/" },
+  { title: "HackIllinois 2023", hackathon_url: "https://hackillinois-2023.devpost.com/" },
+  { title: "HackIllinois 2019", hackathon_url: "https://hackillinois2019.devpost.com/" },
+  { title: "HackIllinois 2018", hackathon_url: "https://hackillinois-2018.devpost.com/" },
+  { title: "HackIllinois 2017", hackathon_url: "https://hackillinois-2017.devpost.com/" },
+  { title: "HackIllinois 2016", hackathon_url: "https://hackillinois2016s.devpost.com/" },
+  { title: "HackIllinois 2015", hackathon_url: "https://hackillinois2015s.devpost.com/" },
+  { title: "HackIllinois", hackathon_url: "https://hackillinois2014s.devpost.com/" },
+  { title: "BoilerMake 2014", hackathon_url: "https://boilermake2014.devpost.com/" },
+  { title: "BoilerMake XII", hackathon_url: "https://boilermake-xii.devpost.com/" },
+  { title: "BoilerMake XI", hackathon_url: "https://boilermake-xi.devpost.com/" },
+  { title: "BoilerMake X", hackathon_url: "https://boilermake-x.devpost.com/" },
+  { title: "BoilerMake VII", hackathon_url: "https://boilermake-vii.devpost.com/" },
+  { title: "BoilerMake VI", hackathon_url: "https://boilermake-vi.devpost.com/" },
+  { title: "BoilerMake IV", hackathon_url: "https://boilermake-iv.devpost.com/" },
+  { title: "BoilerMake 2015", hackathon_url: "https://boilermake2015.devpost.com/" },
+  { title: "BoilerMake", hackathon_url: "https://boilermake.devpost.com/" },
+  { title: "HackPrinceton Fall 2025", hackathon_url: "https://hackprinceton-fall-2025.devpost.com/" },
+  { title: "HackPrinceton Spring 2024", hackathon_url: "https://hackprinceton-spring-2024.devpost.com/" },
+  { title: "HackPrinceton Fall 2023", hackathon_url: "https://hackprinceton-fall-2023.devpost.com/" },
+  { title: "HackPrinceton Fall 2016", hackathon_url: "https://hackprinceton-fall16.devpost.com/" },
+  { title: "HackGT Presents: Horizons 2020", hackathon_url: "https://horizons2020.devpost.com/" },
+  { title: "HackGT Presents: BuildGT 2", hackathon_url: "https://buildgt-2019.devpost.com/" },
+  { title: "HackGT Presents: BuildGT", hackathon_url: "https://buildgt-2018.devpost.com/" },
+  { title: "HackGT 2017", hackathon_url: "https://hackgt2017.devpost.com/" },
+  { title: "HackGT@UPC 2016", hackathon_url: "https://hack-gtupc.devpost.com/" },
+  { title: "HackGT 2016", hackathon_url: "https://hackgt2016.devpost.com/" },
+  { title: "HackGT 9", hackathon_url: "https://hackgt-9.devpost.com/" },
+  { title: "HackGT 7", hackathon_url: "https://hackgt2020.devpost.com/" },
+  { title: "HackGT", hackathon_url: "https://hackgt2014.devpost.com/" },
+  { title: "Hack the North 2025", hackathon_url: "https://hackthenorth2025.devpost.com/" },
+  { title: "Hack the North 2024", hackathon_url: "https://hackthenorth2024.devpost.com/" },
+  { title: "Hack the North 2023", hackathon_url: "https://hackthenorth2023.devpost.com/" },
+  { title: "Hack the North 2022", hackathon_url: "https://hackthenorth2022.devpost.com/" },
+  { title: "Hack the North 2021", hackathon_url: "https://hackthenorth2021.devpost.com/" },
+  { title: "Hack the North 2020++", hackathon_url: "https://hackthenorth2020.devpost.com/" },
+  { title: "Hack the North 2019", hackathon_url: "https://hackthenorth2019.devpost.com/" },
+  { title: "Hack the North 2018", hackathon_url: "https://hackthenorth2018.devpost.com/" },
+  { title: "Hack the North 2015", hackathon_url: "https://hackthenorth2015.devpost.com/" },
+  { title: "TreeHacks 2025", hackathon_url: "https://treehacks-2025.devpost.com/" },
+  { title: "TreeHacks 2024", hackathon_url: "https://treehacks-2024.devpost.com/" },
+  { title: "TreeHacks 2023", hackathon_url: "https://treehacks-2023.devpost.com/" },
+  { title: "TreeHacks 2022", hackathon_url: "https://treehacks-2022.devpost.com/" },
+  { title: "TreeHacks 2021", hackathon_url: "https://treehacks-2021.devpost.com/" },
+  { title: "TreeHacks 2020", hackathon_url: "https://treehacks-2020.devpost.com/" },
+  { title: "TreeHacks 2019", hackathon_url: "https://treehacks-2019.devpost.com/" },
+  { title: "TreeHacks 2018", hackathon_url: "https://treehacks-2018.devpost.com/" },
+  { title: "TreeHacks 2017", hackathon_url: "https://treehacks-2017.devpost.com/" },
+  { title: "HackMIT 2023", hackathon_url: "https://hackmit-2023.devpost.com/" },
+  { title: "HackMIT 2020", hackathon_url: "https://hackmit-2020.devpost.com/" },
+  { title: "HackMIT 2019", hackathon_url: "https://hackmit-2019.devpost.com/" },
+  { title: "HackMIT 2018", hackathon_url: "https://hackmit-2018.devpost.com/" },
+  { title: "HackMIT 2017", hackathon_url: "https://hackmit-2017.devpost.com/" },
+  { title: "HackMIT", hackathon_url: "https://hackmit.devpost.com/" },
+];
+
+type ParsedSearchCommand = {
+  mode: SearchCommandMode;
+  queryText: string;
+  explicitCommand: SearchCommandMode | null;
+};
 
 function getInitialTheme(): ThemeMode {
   if (typeof window === "undefined") {
@@ -50,58 +127,41 @@ function getInitialTheme(): ThemeMode {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function ThemeToggleIcon({ theme }: { theme: ThemeMode }) {
-  if (theme === "light") {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        height="24px"
-        viewBox="0 -960 960 960"
-        width="24px"
-        fill="#e3e3e3"
-        aria-hidden="true"
-      >
-        <path d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q55 0 101-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z" />
-      </svg>
-    );
-  }
+function buildPublicIconUrl(fileName: string): string {
+  const base = import.meta.env.BASE_URL ?? "/";
+  return `${base}icons/${fileName}`;
+}
 
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      height="24px"
-      viewBox="0 -960 960 960"
-      width="24px"
-      fill="#e3e3e3"
-      aria-hidden="true"
-    >
-      <path d="M565-395q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35Zm-226.5 56.5Q280-397 280-480t58.5-141.5Q397-680 480-680t141.5 58.5Q680-563 680-480t-58.5 141.5Q563-280 480-280t-141.5-58.5ZM200-440H40v-80h160v80Zm720 0H760v-80h160v80ZM440-760v-160h80v160h-80Zm0 720v-160h80v160h-80ZM256-650l-101-97 57-59 96 100-52 56Zm492 496-97-101 53-55 101 97-57 59Zm-98-550 97-101 59 57-100 96-56-52ZM154-212l101-97 55 53-97 101-59-57Zm326-268Z" />
-    </svg>
-  );
+function IconMask({ fileName, className }: { fileName: string; className?: string }) {
+  const iconStyle = {
+    "--icon-url": `url("${buildPublicIconUrl(fileName)}")`,
+  } as CSSProperties;
+
+  return <span className={className ? `icon-mask ${className}` : "icon-mask"} style={iconStyle} aria-hidden="true" />;
+}
+
+function ThemeToggleIcon({ theme }: { theme: ThemeMode }) {
+  return <IconMask fileName={theme === "light" ? "dark-mode.svg" : "light-mode.svg"} />;
 }
 
 function HomeIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" aria-hidden="true">
-      <path d="M240-200h160v-240h160v240h160v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H480v-240h-80v240H160Zm320-350Z" />
-    </svg>
-  );
+  return <IconMask fileName="home.svg" />;
 }
 
 function HelpIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" aria-hidden="true">
-      <path d="M478-240q17 0 29.5-12.5T520-282q0-17-12.5-29.5T478-324q-17 0-29.5 12.5T436-282q0 17 12.5 29.5T478-240Zm-36-154h74q0-35 12.5-58.5T574-498q35-33 48.5-58t13.5-55q0-61-40-99.5T484-749q-56 0-95 27t-58 79l66 26q9-30 30-48t53-18q35 0 56.5 18.5T558-611q0 23-12.5 40.5T506-531q-35 30-49.5 62T442-394Zm36 314q-82 0-155-31.5t-127.5-86Q141-252 109.5-325T78-480q0-83 31.5-156t86-127.5Q250-818 323-849.5T478-881q83 0 156 31.5t127.5 86Q816-709 847.5-636T879-480q0 82-31.5 155T761-197.5Q707-143 634-111.5T478-80Zm2-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
-    </svg>
-  );
+  return <IconMask fileName="help.svg" />;
 }
 
 function RobotIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" aria-hidden="true">
-      <path d="M400-480q33 0 56.5-23.5T480-560q0-33-23.5-56.5T400-640q-33 0-56.5 23.5T320-560q0 33 23.5 56.5T400-480Zm160 0q33 0 56.5-23.5T640-560q0-33-23.5-56.5T560-640q-33 0-56.5 23.5T480-560q0 33 23.5 56.5T560-480ZM320-280h320v-80H320v80Zm160-440q-17 0-28.5-11.5T440-760v-40l-50-50 28-28 62 62v56h80v-56l62-62 28 28-50 50v40q0 17-11.5 28.5T560-720h-80Zm-200 80h400q33 0 56.5 23.5T760-560v280q0 33-23.5 56.5T680-200h-40v80h-80v-80H400v80h-80v-80h-40q-33 0-56.5-23.5T200-280v-280q0-33 23.5-56.5T280-640Z" />
-    </svg>
-  );
+  return <IconMask fileName="robot.svg" />;
+}
+
+function RepoLinkIcon() {
+  return <IconMask fileName="code.svg" />;
+}
+
+function SearchIcon() {
+  return <IconMask fileName="search.svg" className="search-button-icon" />;
 }
 
 function ActionButtons({
@@ -110,6 +170,7 @@ function ActionButtons({
   nextThemeLabel,
   onGoHome,
   onOpenHelp,
+  onOpenRepoShortcut,
   onOpenRobot,
   onToggleTheme,
 }: {
@@ -118,6 +179,7 @@ function ActionButtons({
   nextThemeLabel: ThemeMode;
   onGoHome: () => void;
   onOpenHelp: () => void;
+  onOpenRepoShortcut: () => void;
   onOpenRobot: () => void;
   onToggleTheme: () => void;
 }) {
@@ -128,6 +190,15 @@ function ActionButtons({
       </button>
       <button type="button" className="help-button" onClick={onOpenHelp} aria-label="Help" title="Help">
         <HelpIcon />
+      </button>
+      <button
+        type="button"
+        className="repo-button"
+        onClick={onOpenRepoShortcut}
+        aria-label="Repository"
+        title="Repository"
+      >
+        <RepoLinkIcon />
       </button>
       <button type="button" className="robot-button" onClick={onOpenRobot} aria-label="GitHub" title="GitHub">
         <RobotIcon />
@@ -155,6 +226,127 @@ function parseErrorMessage(error: unknown, fallback: string): string {
     return (error as { message: string }).message;
   }
   return fallback;
+}
+
+type SearchCommandInputProps = {
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  autoFocus?: boolean;
+};
+
+function getCommandStyledSegments(value: string): Array<{ text: string; isCommand: boolean }> {
+  const commandMatch = value.match(/^(\s*)(\/\S*)/);
+  if (!commandMatch) {
+    return [{ text: value, isCommand: false }];
+  }
+
+  const leadingWhitespace = commandMatch[1] ?? "";
+  const commandToken = commandMatch[2] ?? "";
+  const commandEndIndex = leadingWhitespace.length + commandToken.length;
+  const trailingText = value.slice(commandEndIndex);
+  const segments: Array<{ text: string; isCommand: boolean }> = [];
+
+  if (leadingWhitespace.length > 0) {
+    segments.push({ text: leadingWhitespace, isCommand: false });
+  }
+  if (commandToken.length > 0) {
+    segments.push({ text: commandToken, isCommand: true });
+  }
+  if (trailingText.length > 0) {
+    segments.push({ text: trailingText, isCommand: false });
+  }
+
+  return segments;
+}
+
+function SearchCommandInput({
+  value,
+  placeholder,
+  onChange,
+  onFocus,
+  onBlur,
+  onKeyDown,
+  autoFocus = false,
+}: SearchCommandInputProps) {
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+  const normalMeasureRef = useRef<HTMLSpanElement | null>(null);
+  const commandMeasureRef = useRef<HTMLSpanElement | null>(null);
+  const highlightedSegments = useMemo(() => getCommandStyledSegments(value), [value]);
+  const commandToken = useMemo(() => {
+    const commandMatch = value.match(/^\s*(\/\S*)/);
+    return commandMatch?.[1] ?? "";
+  }, [value]);
+  const [commandCaretOffsetPx, setCommandCaretOffsetPx] = useState(0);
+
+  useEffect(() => {
+    const normalMeasure = normalMeasureRef.current;
+    const commandMeasure = commandMeasureRef.current;
+    if (!normalMeasure || !commandMeasure || commandToken.length === 0) {
+      setCommandCaretOffsetPx(0);
+      return;
+    }
+
+    const measureOffset = () => {
+      normalMeasure.textContent = commandToken;
+      commandMeasure.textContent = commandToken;
+      const normalWidth = normalMeasure.getBoundingClientRect().width;
+      const commandWidth = commandMeasure.getBoundingClientRect().width;
+      const delta = commandWidth - normalWidth;
+      setCommandCaretOffsetPx(Number.isFinite(delta) ? delta : 0);
+    };
+
+    measureOffset();
+    if ("fonts" in document) {
+      void document.fonts.ready.then(measureOffset);
+    }
+  }, [commandToken]);
+
+  function syncHighlightScroll(inputElement: HTMLInputElement): void {
+    if (!highlightRef.current) {
+      return;
+    }
+    highlightRef.current.scrollLeft = inputElement.scrollLeft;
+  }
+
+  return (
+    <div className="search-input-layered">
+      <div className="search-input-highlight" aria-hidden="true" ref={highlightRef}>
+        {value.length > 0 ? (
+          highlightedSegments.map((segment, index) => (
+            <span key={`${index}:${segment.text}`} className={segment.isCommand ? "search-command-text" : undefined}>
+              {segment.text}
+            </span>
+          ))
+        ) : (
+          <span className="search-input-empty" />
+        )}
+      </div>
+      <input
+        className={commandToken.length > 0 ? "search-input-native has-command-prefix" : "search-input-native"}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        style={{ "--command-caret-offset": `${commandCaretOffsetPx}px` } as CSSProperties}
+        onChange={(targetEvent) => {
+          onChange(targetEvent.currentTarget.value);
+          syncHighlightScroll(targetEvent.currentTarget);
+        }}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        onScroll={(targetEvent) => syncHighlightScroll(targetEvent.currentTarget)}
+        autoFocus={autoFocus}
+      />
+      <div className="search-command-measurements" aria-hidden="true">
+        <span ref={normalMeasureRef} className="search-command-measure-normal" />
+        <span ref={commandMeasureRef} className="search-command-measure-code" />
+      </div>
+    </div>
+  );
 }
 
 function normalizeDevpostHackathonUrl(value: string): string | null {
@@ -193,6 +385,73 @@ function guessHackathonTitleFromUrl(hackathonUrl: string): string {
 
 function normalizeSearchText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function parseSearchCommandInput(rawValue: string): ParsedSearchCommand {
+  const leftTrimmed = rawValue.replace(/^\s+/, "");
+  const hackathonsMatch = leftTrimmed.match(/^\/hackathons(?:\s+|$)(.*)$/i);
+  if (hackathonsMatch) {
+    return {
+      mode: "hackathons",
+      queryText: (hackathonsMatch[1] ?? "").trim(),
+      explicitCommand: "hackathons",
+    };
+  }
+
+  const findMatch = leftTrimmed.match(/^\/find(?:\s+|$)(.*)$/i);
+  if (findMatch) {
+    return {
+      mode: "find",
+      queryText: (findMatch[1] ?? "").trim(),
+      explicitCommand: "find",
+    };
+  }
+
+  const commandMatch = leftTrimmed.match(/^\/([a-zA-Z]+)\b(.*)$/);
+  if (!commandMatch) {
+    return {
+      mode: "hackathons",
+      queryText: rawValue.trim(),
+      explicitCommand: null,
+    };
+  }
+
+  // If input starts with an unknown slash command, suppress normal search/autocomplete
+  // until a supported command is fully used.
+  return {
+    mode: "hackathons",
+    queryText: "",
+    explicitCommand: null,
+  };
+}
+
+function formatQueryForMode(
+  mode: SearchCommandMode,
+  queryText: string,
+  explicitCommand: SearchCommandMode | null,
+): string {
+  const trimmedQuery = queryText.trim();
+  if (mode === "find") {
+    return trimmedQuery.length > 0 ? `/find ${trimmedQuery}` : "/find";
+  }
+  if (explicitCommand === "hackathons") {
+    return trimmedQuery.length > 0 ? `/hackathons ${trimmedQuery}` : "/hackathons";
+  }
+  return trimmedQuery;
+}
+
+function doesPrizeMatchFindQuery(prizeName: string, queryText: string): boolean {
+  const normalizedQuery = normalizeSearchText(queryText);
+  if (!normalizedQuery) {
+    return false;
+  }
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (queryTokens.length === 0) {
+    return false;
+  }
+
+  const normalizedPrizeName = normalizeSearchText(prizeName);
+  return queryTokens.every((token) => normalizedPrizeName.includes(token));
 }
 
 function extractYearFromText(value: string): number | null {
@@ -277,6 +536,54 @@ function mergeProgressEvents(baseEvents: ProgressEvent[], incomingEvents: Progre
 
 function LoadingSpinner({ small = false }: { small?: boolean }) {
   return <span className={small ? "loading-spinner small" : "loading-spinner"} aria-hidden="true" />;
+}
+
+async function fetchFindHackathonResult(
+  suggestion: HackathonSearchSuggestion,
+  snapshotManifest: SnapshotManifestV1 | null,
+  liveLookupsEnabled: boolean,
+  signal: AbortSignal,
+): Promise<HackathonResult | null> {
+  let snapshotResult: HackathonResult | null = null;
+  try {
+    const snapshotShard = await getSnapshotShard(suggestion.hackathon_url, {
+      manifest: snapshotManifest,
+      signal,
+    });
+    snapshotResult = snapshotShard?.result ?? null;
+  } catch {
+    snapshotResult = null;
+  }
+
+  if (snapshotResult || !liveLookupsEnabled || signal.aborted) {
+    return snapshotResult;
+  }
+
+  try {
+    const createPayload = await createLookup(suggestion.hackathon_url);
+    const startedAt = Date.now();
+    while (!signal.aborted && Date.now() - startedAt < FIND_LOOKUP_TIMEOUT_MS) {
+      try {
+        const lookupPayload = await getLookup(createPayload.lookup_id);
+        if (lookupPayload.status === "completed") {
+          return lookupPayload.result ?? null;
+        }
+        if (lookupPayload.status === "failed") {
+          return null;
+        }
+      } catch {
+        // Continue polling on transient lookup fetch failures.
+      }
+
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, FIND_LOOKUP_POLL_INTERVAL_MS);
+      });
+    }
+  } catch {
+    return snapshotResult;
+  }
+
+  return snapshotResult;
 }
 
 function WinnerCard({
@@ -450,6 +757,150 @@ function WinnerCard({
         </span>
       </div>
     </article>
+  );
+}
+
+type FindPrizeMatch = {
+  id: string;
+  hackathonTitle: string;
+  winner: WinnerProject;
+  matchedPrizes: PrizeAward[];
+};
+
+function FindTrackPrizeSection({
+  query,
+  snapshotManifest,
+  liveLookupsEnabled,
+}: {
+  query: string;
+  snapshotManifest: SnapshotManifestV1 | null;
+  liveLookupsEnabled: boolean;
+}) {
+  const [matches, setMatches] = useState<FindPrizeMatch[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const normalizedQuery = normalizeSearchText(query);
+    if (!normalizedQuery) {
+      setMatches([]);
+      setIsLoading(false);
+      setLoadError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    void (async () => {
+      try {
+        const allResults = await Promise.all(
+          FIND_TRACK_PRIZE_HACKATHONS.map(async (suggestion) => {
+            const result = await fetchFindHackathonResult(suggestion, snapshotManifest, liveLookupsEnabled, controller.signal);
+            return { suggestion, result };
+          }),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextMatches: FindPrizeMatch[] = [];
+        for (const item of allResults) {
+          if (!item.result) {
+            continue;
+          }
+
+          const hackathonTitle = item.result.hackathon.name || item.suggestion.title;
+          for (const winner of item.result.winners) {
+            const matchedPrizes = winner.prizes.filter((prize) => doesPrizeMatchFindQuery(prize.prize_name, query));
+            if (matchedPrizes.length === 0) {
+              continue;
+            }
+
+            nextMatches.push({
+              id: `${item.result.hackathon.url}:${winner.project_url}`,
+              hackathonTitle,
+              winner,
+              matchedPrizes,
+            });
+          }
+        }
+
+        nextMatches.sort((left, right) => {
+          const leftYear = extractYearFromText(`${left.hackathonTitle} ${left.id}`) ?? -1;
+          const rightYear = extractYearFromText(`${right.hackathonTitle} ${right.id}`) ?? -1;
+          if (leftYear !== rightYear) {
+            return rightYear - leftYear;
+          }
+          return left.winner.project_title.localeCompare(right.winner.project_title, undefined, { sensitivity: "base" });
+        });
+
+        setMatches(nextMatches);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setLoadError(parseErrorMessage(error, "Failed to load /find prize matches."));
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [query, snapshotManifest, liveLookupsEnabled]);
+
+  return (
+    <section className="lookup-section">
+      <section className="results-meta">
+        <h2>Track and Prize Matches</h2>
+        <p>
+          {matches.length} matching winner project(s) in TreeHacks, Cal Hacks, HackIllinois, Boilermake, HackPrinceton, HackGT, and Hack the North for "{query}".
+        </p>
+      </section>
+
+      {loadError ? <p className="inline-error">{loadError}</p> : null}
+
+      {isLoading && matches.length === 0 ? (
+        <section className="inline-spinner-only lookup-section-spinner">
+          <LoadingSpinner />
+        </section>
+      ) : null}
+
+      {!isLoading && !loadError && matches.length === 0 ? (
+        <section className="empty-state">
+          <h2>No track or prize matches found</h2>
+          <p>Try a broader keyword for /find.</p>
+        </section>
+      ) : null}
+
+      {matches.length > 0 ? (
+        <section className="winner-image-grid">
+          {matches.map((match) => {
+            const winnerForCard: WinnerProject = {
+              ...match.winner,
+              prizes: match.matchedPrizes,
+              tagline: match.winner.tagline ? `${match.hackathonTitle} · ${match.winner.tagline}` : match.hackathonTitle,
+            };
+            return <WinnerCard key={match.id} winner={winnerForCard} />;
+          })}
+        </section>
+      ) : null}
+
+      {isLoading && matches.length > 0 ? (
+        <div className="cards-loading-indicator">
+          <LoadingSpinner small />
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -854,6 +1305,8 @@ export default function App() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lookupTargets, setLookupTargets] = useState<HackathonSearchSuggestion[]>([]);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [activeCommandMode, setActiveCommandMode] = useState<SearchCommandMode>("hackathons");
+  const [activeFindQuery, setActiveFindQuery] = useState<string | null>(null);
   const [snapshotManifest, setSnapshotManifest] = useState<SnapshotManifestV1 | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
 
@@ -864,6 +1317,8 @@ export default function App() {
   const lastLookupSubmission = useRef<{ signature: string; createdAt: number } | null>(null);
 
   const hasActiveSearch = lookupTargets.length > 0;
+  const parsedSearchInput = useMemo(() => parseSearchCommandInput(query), [query]);
+  const effectiveSearchQuery = parsedSearchInput.queryText;
   const sortedSuggestions = useMemo(() => sortSuggestionsByNewestYear(suggestions), [suggestions]);
 
   useEffect(() => {
@@ -885,7 +1340,7 @@ export default function App() {
   }, [theme]);
 
   const autocompleteOptions = useMemo<SearchAutocompleteOption[]>(() => {
-    const trimmedQuery = query.trim();
+    const trimmedQuery = effectiveSearchQuery.trim();
     if (trimmedQuery.length < 2) {
       return [];
     }
@@ -893,11 +1348,16 @@ export default function App() {
     const options: SearchAutocompleteOption[] = [];
     const isDirectUrl = normalizeDevpostHackathonUrl(trimmedQuery) !== null;
     if (!isDirectUrl && sortedSuggestions.length > 0) {
+      const searchAllTitle = parsedSearchInput.mode === "find" ? `Find "${trimmedQuery}"` : `Search "${trimmedQuery}"`;
+      const searchAllSubtitle =
+        parsedSearchInput.mode === "find"
+          ? "Search for related hackathons & track matches from popular hackathons"
+          : "Load all matching years";
       options.push({
         kind: "search_all",
-        key: `search-all:${normalizeSearchText(trimmedQuery)}`,
-        title: `Search "${trimmedQuery}"`,
-        subtitle: "Load all matching years",
+        key: `search-all:${parsedSearchInput.mode}:${normalizeSearchText(trimmedQuery)}`,
+        title: searchAllTitle,
+        subtitle: searchAllSubtitle,
         query: trimmedQuery,
       });
     }
@@ -911,10 +1371,10 @@ export default function App() {
     }
 
     return options;
-  }, [query, sortedSuggestions]);
+  }, [effectiveSearchQuery, parsedSearchInput.mode, sortedSuggestions]);
 
   useEffect(() => {
-    const trimmed = query.trim();
+    const trimmed = effectiveSearchQuery.trim();
 
     if (trimmed.length < 2) {
       setIsSuggestionsOpen(false);
@@ -955,7 +1415,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [effectiveSearchQuery]);
 
   useEffect(() => {
     return () => {
@@ -999,7 +1459,10 @@ export default function App() {
     }
   }, [activeSuggestionIndex, autocompleteOptions.length]);
 
-  function applyLookupTargets(targets: HackathonSearchSuggestion[], options?: { queryValue?: string }): void {
+  function applyLookupTargets(
+    targets: HackathonSearchSuggestion[],
+    options?: { queryValue?: string; commandMode?: SearchCommandMode; findQuery?: string | null },
+  ): void {
     const deduped = dedupeSuggestionsByUrl(targets);
     if (deduped.length === 0) {
       setLookupError("No matching hackathons were found.");
@@ -1020,6 +1483,9 @@ export default function App() {
 
     setLookupError(null);
     setLookupTargets(ordered);
+    const commandMode = options?.commandMode ?? "hackathons";
+    setActiveCommandMode(commandMode);
+    setActiveFindQuery(commandMode === "find" ? (options?.findQuery ?? null) : null);
     setQuery(options?.queryValue ?? query);
     setIsSuggestionsOpen(false);
     hasKeyboardSuggestionSelection.current = false;
@@ -1031,9 +1497,20 @@ export default function App() {
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
 
-    const trimmedQuery = query.trim();
-    const directUrl = normalizeDevpostHackathonUrl(query);
+    const parsedInput = parseSearchCommandInput(query);
+    const trimmedQuery = parsedInput.queryText.trim();
+    if (!trimmedQuery) {
+      setLookupError(
+        parsedInput.mode === "find"
+          ? 'Type a keyword after "/find".'
+          : "Select a suggestion or enter a direct Devpost hackathon URL.",
+      );
+      return;
+    }
+
+    const directUrl = normalizeDevpostHackathonUrl(trimmedQuery);
     if (directUrl) {
+      const nextQueryValue = formatQueryForMode(parsedInput.mode, directUrl, parsedInput.explicitCommand);
       applyLookupTargets(
         [
           {
@@ -1041,13 +1518,26 @@ export default function App() {
             hackathon_url: directUrl,
           },
         ],
-        { queryValue: directUrl },
+        {
+          queryValue: nextQueryValue,
+          commandMode: parsedInput.mode,
+          findQuery: parsedInput.mode === "find" ? trimmedQuery : null,
+        },
       );
       return;
     }
 
     if (sortedSuggestions.length === 0) {
       setLookupError("Select a suggestion or enter a direct Devpost hackathon URL.");
+      return;
+    }
+
+    if (parsedInput.mode === "find") {
+      applyLookupTargets(sortedSuggestions, {
+        queryValue: formatQueryForMode("find", trimmedQuery, parsedInput.explicitCommand),
+        commandMode: "find",
+        findQuery: trimmedQuery,
+      });
       return;
     }
 
@@ -1059,7 +1549,11 @@ export default function App() {
       );
     });
     if (exactMatch) {
-      applyLookupTargets([exactMatch], { queryValue: exactMatch.title });
+      applyLookupTargets([exactMatch], {
+        queryValue: formatQueryForMode("hackathons", exactMatch.title, parsedInput.explicitCommand),
+        commandMode: "hackathons",
+        findQuery: null,
+      });
       return;
     }
 
@@ -1069,24 +1563,54 @@ export default function App() {
         return extractYearFromText(`${suggestion.title} ${suggestion.hackathon_url}`) === requestedYear;
       });
       if (sameYearMatch) {
-        applyLookupTargets([sameYearMatch], { queryValue: sameYearMatch.title });
+        applyLookupTargets([sameYearMatch], {
+          queryValue: formatQueryForMode("hackathons", sameYearMatch.title, parsedInput.explicitCommand),
+          commandMode: "hackathons",
+          findQuery: null,
+        });
         return;
       }
     }
 
-    applyLookupTargets(sortedSuggestions, { queryValue: trimmedQuery });
+    applyLookupTargets(sortedSuggestions, {
+      queryValue: formatQueryForMode("hackathons", trimmedQuery, parsedInput.explicitCommand),
+      commandMode: "hackathons",
+      findQuery: null,
+    });
   }
 
   function handleSuggestionPick(suggestion: HackathonSearchSuggestion): void {
-    applyLookupTargets([suggestion], { queryValue: suggestion.title });
+    const parsedInput = parseSearchCommandInput(query);
+    if (parsedInput.mode === "find") {
+      const findQuery = parsedInput.queryText.trim() || suggestion.title;
+      applyLookupTargets(sortedSuggestions.length > 0 ? sortedSuggestions : [suggestion], {
+        queryValue: formatQueryForMode("find", findQuery, parsedInput.explicitCommand),
+        commandMode: "find",
+        findQuery,
+      });
+      return;
+    }
+
+    applyLookupTargets([suggestion], {
+      queryValue: formatQueryForMode("hackathons", suggestion.title, parsedInput.explicitCommand),
+      commandMode: "hackathons",
+      findQuery: null,
+    });
   }
 
   function handleSearchAllPick(queryValue?: string): void {
+    const parsedInput = parseSearchCommandInput(query);
     if (sortedSuggestions.length === 0) {
       setLookupError("No matching hackathons were found.");
       return;
     }
-    applyLookupTargets(sortedSuggestions, { queryValue: queryValue ?? query.trim() });
+
+    const normalizedQueryValue = queryValue ?? parsedInput.queryText.trim() ?? query.trim();
+    applyLookupTargets(sortedSuggestions, {
+      queryValue: formatQueryForMode(parsedInput.mode, normalizedQueryValue, parsedInput.explicitCommand),
+      commandMode: parsedInput.mode,
+      findQuery: parsedInput.mode === "find" ? normalizedQueryValue : null,
+    });
   }
 
   function handleAutocompleteOptionPick(option: SearchAutocompleteOption): void {
@@ -1100,7 +1624,7 @@ export default function App() {
   function handleQueryChange(value: string): void {
     setQuery(value);
     setLookupError(null);
-    setIsSuggestionsOpen(value.trim().length >= 2);
+    setIsSuggestionsOpen(parseSearchCommandInput(value).queryText.trim().length >= 2);
     hasKeyboardSuggestionSelection.current = false;
   }
 
@@ -1161,7 +1685,7 @@ export default function App() {
       closeSuggestionsTimeout.current = null;
     }
 
-    if (query.trim().length >= 2) {
+    if (parsedSearchInput.queryText.trim().length >= 2) {
       setIsSuggestionsOpen(true);
     }
   }
@@ -1181,10 +1705,16 @@ export default function App() {
     setLookupError(null);
     setSearchError(null);
     setIsSuggestionsOpen(false);
+    setActiveCommandMode("hackathons");
+    setActiveFindQuery(null);
   }
 
   function handleOpenHelp(): void {
     window.open("https://github.com/aryan-cs/hackaplan#readme", "_blank", "noopener,noreferrer");
+  }
+
+  function handleOpenRepoShortcut(): void {
+    window.open("https://github.com/aryan-cs/hackaplan", "_blank", "noopener,noreferrer");
   }
 
   function handleOpenRobot(): void {
@@ -1201,6 +1731,7 @@ export default function App() {
         nextThemeLabel={nextThemeLabel}
         onGoHome={handleGoHome}
         onOpenHelp={handleOpenHelp}
+        onOpenRepoShortcut={handleOpenRepoShortcut}
         onOpenRobot={handleOpenRobot}
         onToggleTheme={handleThemeToggle}
       />
@@ -1217,39 +1748,29 @@ export default function App() {
               nextThemeLabel={nextThemeLabel}
               onGoHome={handleGoHome}
               onOpenHelp={handleOpenHelp}
+              onOpenRepoShortcut={handleOpenRepoShortcut}
               onOpenRobot={handleOpenRobot}
               onToggleTheme={handleThemeToggle}
             />
             <div className="search-input-shell">
-              <input
-                type="text"
+              <SearchCommandInput
                 value={query}
                 placeholder="Search hackathons (example: Tree Hacks)"
-                onChange={(targetEvent) => handleQueryChange(targetEvent.currentTarget.value)}
+                onChange={handleQueryChange}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
                 onKeyDown={handleInputKeyDown}
                 autoFocus
               />
               <button type="submit" aria-label="Search">
-                <svg
-                  className="search-button-icon"
-                  xmlns="http://www.w3.org/2000/svg"
-                  height="24px"
-                  viewBox="0 -960 960 960"
-                  width="24px"
-                  fill="#e3e3e3"
-                  aria-hidden="true"
-                >
-                  <path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z" />
-                </svg>
+                <SearchIcon />
               </button>
             </div>
 
             {isSuggestionsOpen ? (
               <div className="suggestions-dropdown" ref={suggestionsDropdownRef}>
                 {isLoadingSuggestions ? <p className="suggestions-message">Loading suggestions...</p> : null}
-                {!isLoadingSuggestions && suggestions.length === 0 && query.trim().length >= 2 ? (
+                {!isLoadingSuggestions && suggestions.length === 0 && effectiveSearchQuery.trim().length >= 2 ? (
                   <p className="suggestions-message">No matching hackathons found.</p>
                 ) : null}
                 {autocompleteOptions.length > 0 ? (
@@ -1294,38 +1815,28 @@ export default function App() {
                 nextThemeLabel={nextThemeLabel}
                 onGoHome={handleGoHome}
                 onOpenHelp={handleOpenHelp}
+                onOpenRepoShortcut={handleOpenRepoShortcut}
                 onOpenRobot={handleOpenRobot}
                 onToggleTheme={handleThemeToggle}
               />
               <div className="search-input-shell">
-                <input
-                  type="text"
+                <SearchCommandInput
                   value={query}
                   placeholder="Search another hackathon"
-                  onChange={(targetEvent) => handleQueryChange(targetEvent.currentTarget.value)}
+                  onChange={handleQueryChange}
                   onFocus={handleInputFocus}
                   onBlur={handleInputBlur}
                   onKeyDown={handleInputKeyDown}
                 />
                 <button type="submit" aria-label="Search">
-                  <svg
-                    className="search-button-icon"
-                    xmlns="http://www.w3.org/2000/svg"
-                    height="24px"
-                    viewBox="0 -960 960 960"
-                    width="24px"
-                    fill="#e3e3e3"
-                    aria-hidden="true"
-                  >
-                    <path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z" />
-                  </svg>
+                  <SearchIcon />
                 </button>
               </div>
 
               {isSuggestionsOpen ? (
                 <div className="suggestions-dropdown" ref={suggestionsDropdownRef}>
                   {isLoadingSuggestions ? <p className="suggestions-message">Loading suggestions...</p> : null}
-                  {!isLoadingSuggestions && suggestions.length === 0 && query.trim().length >= 2 ? (
+                  {!isLoadingSuggestions && suggestions.length === 0 && effectiveSearchQuery.trim().length >= 2 ? (
                     <p className="suggestions-message">No matching hackathons found.</p>
                   ) : null}
                   {autocompleteOptions.length > 0 ? (
@@ -1360,6 +1871,16 @@ export default function App() {
 
           {searchError ? <p className="inline-error">{searchError}</p> : null}
           {lookupError ? <p className="inline-error">{lookupError}</p> : null}
+          {activeCommandMode === "find" && activeFindQuery ? (
+            <>
+              <FindTrackPrizeSection
+                query={activeFindQuery}
+                snapshotManifest={snapshotManifest}
+                liveLookupsEnabled={LIVE_LOOKUPS_ENABLED}
+              />
+              {lookupTargets.length > 0 ? <hr className="lookup-divider" /> : null}
+            </>
+          ) : null}
           {lookupTargets.map((target, index) => (
             <div key={target.hackathon_url}>
               {index > 0 ? <hr className="lookup-divider" /> : null}

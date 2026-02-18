@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@8..144,300..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@300;400;500;600;700&family=Google+Sans+Flex:opsz,wght@8..144,300..700&display=swap");
 
 :root {
   color-scheme: light;
@@ -7,6 +7,8 @@
   background: #f6f7fb;
   color: #11151a;
   --link-color: #0b57d0;
+  --search-text-color: #11151a;
+  --search-placeholder-color: #6e7684;
 }
 
 :root[data-theme="dark"] {
@@ -14,6 +16,8 @@
   background: #111316;
   color: #eceff3;
   --link-color: #d4d8dd;
+  --search-text-color: #eceff3;
+  --search-placeholder-color: #8f959e;
 }
 
 * {
@@ -72,6 +76,7 @@ a:hover {
 
 .home-button,
 .help-button,
+.repo-button,
 .robot-button,
 .theme-toggle {
   position: fixed;
@@ -97,6 +102,10 @@ a:hover {
 }
 
 .help-button {
+  right: 172px;
+}
+
+.repo-button {
   right: 120px;
 }
 
@@ -110,6 +119,7 @@ a:hover {
 
 .home-button:hover,
 .help-button:hover,
+.repo-button:hover,
 .robot-button:hover,
 .theme-toggle:hover {
   border-color: rgb(11 87 208 / 16%);
@@ -120,19 +130,27 @@ a:hover {
 
 .home-button:focus-visible,
 .help-button:focus-visible,
+.repo-button:focus-visible,
 .robot-button:focus-visible,
 .theme-toggle:focus-visible {
   outline: 2px solid #7fb1ef;
   outline-offset: 2px;
 }
 
-.home-button svg,
-.help-button svg,
-.robot-button svg,
-.theme-toggle svg {
+.icon-mask {
   display: block;
   flex-shrink: 0;
-  fill: currentColor;
+  width: 22px;
+  height: 22px;
+  background-color: currentColor;
+  -webkit-mask-image: var(--icon-url);
+  mask-image: var(--icon-url);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .home-mode {
@@ -195,6 +213,88 @@ a:hover {
   outline: none;
 }
 
+.search-input-layered {
+  position: relative;
+  width: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.search-input-highlight {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border-radius: inherit;
+  padding: 10px 16px;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--search-text-color);
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+
+.search-input-empty {
+  display: inline-block;
+  width: 0;
+}
+
+.search-command-text {
+  font-family: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+  font-size: 1em;
+  font-weight: 500;
+  line-height: inherit;
+}
+
+.search-input-native {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--search-text-color);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.search-input-native.has-command-prefix {
+  text-indent: var(--command-caret-offset, 0px);
+}
+
+.search-input-native::placeholder {
+  color: var(--search-placeholder-color);
+}
+
+.search-command-measurements {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre;
+}
+
+.search-command-measure-normal,
+.search-command-measure-code {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1.25;
+  font-weight: 400;
+  white-space: pre;
+}
+
+.search-command-measure-normal {
+  font-family: "Google Sans Flex", "Segoe UI", sans-serif;
+}
+
+.search-command-measure-code {
+  font-family: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+  font-weight: 500;
+}
+
 .search-input-shell button {
   border: 1px solid #0d54c6;
   background: #0b57d0;
@@ -213,8 +313,8 @@ a:hover {
 }
 
 .search-button-icon {
-  display: block;
-  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 
 .search-input-shell button[disabled] {
@@ -813,6 +913,7 @@ a:hover {
 
 :root[data-theme="dark"] .home-button,
 :root[data-theme="dark"] .help-button,
+:root[data-theme="dark"] .repo-button,
 :root[data-theme="dark"] .robot-button,
 :root[data-theme="dark"] .theme-toggle {
   border-color: transparent;
@@ -823,6 +924,7 @@ a:hover {
 
 :root[data-theme="dark"] .home-button:hover,
 :root[data-theme="dark"] .help-button:hover,
+:root[data-theme="dark"] .repo-button:hover,
 :root[data-theme="dark"] .robot-button:hover,
 :root[data-theme="dark"] .theme-toggle:hover {
   border-color: rgb(214 220 230 / 20%);
@@ -833,6 +935,7 @@ a:hover {
 
 :root[data-theme="dark"] .home-button:focus-visible,
 :root[data-theme="dark"] .help-button:focus-visible,
+:root[data-theme="dark"] .repo-button:focus-visible,
 :root[data-theme="dark"] .robot-button:focus-visible,
 :root[data-theme="dark"] .theme-toggle:focus-visible {
   outline-color: #c3c9d2;
@@ -861,12 +964,11 @@ a:hover {
 }
 
 :root[data-theme="dark"] .search-input-shell input {
-  color: #eceff3;
   background: transparent;
 }
 
 :root[data-theme="dark"] .search-input-shell input::placeholder {
-  color: #8f959e;
+  color: var(--search-placeholder-color);
 }
 
 :root[data-theme="dark"] .search-input-shell button {
@@ -1013,6 +1115,7 @@ a:hover {
 
   .home-button,
   .help-button,
+  .repo-button,
   .robot-button,
   .theme-toggle {
     position: fixed;
@@ -1027,6 +1130,10 @@ a:hover {
   }
 
   .help-button {
+    right: 156px;
+  }
+
+  .repo-button {
     right: 108px;
   }
 
