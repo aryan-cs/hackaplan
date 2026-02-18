@@ -136,6 +136,31 @@ function buildSnapshotUrl(path: string): string {
   return new URL(cleaned, buildSnapshotBaseUrl()).toString();
 }
 
+function resolveSnapshotAssetPath(path: string): string {
+  const trimmedPath = path.trim();
+  if (!trimmedPath) {
+    return trimmedPath;
+  }
+
+  if (/^https?:\/\//i.test(trimmedPath)) {
+    return trimmedPath;
+  }
+
+  const cleaned = trimmedPath.replace(/^\/+/, "");
+  const manifestPath = SNAPSHOT_MANIFEST_PATH.replace(/^\/+/, "");
+  const manifestLastSlash = manifestPath.lastIndexOf("/");
+  if (manifestLastSlash < 0) {
+    return cleaned;
+  }
+
+  const manifestDir = manifestPath.slice(0, manifestLastSlash + 1);
+  if (cleaned.startsWith(manifestDir)) {
+    return cleaned;
+  }
+
+  return `${manifestDir}${cleaned}`;
+}
+
 function createAbortError(): Error {
   const error = new Error("The operation was aborted.");
   error.name = "AbortError";
@@ -504,7 +529,8 @@ export async function getSnapshotShard(
 
   const shardPromise = (async () => {
     try {
-      const response = await fetch(buildSnapshotUrl(manifestEntry.shard_path), {
+      const resolvedShardPath = resolveSnapshotAssetPath(manifestEntry.shard_path);
+      const response = await fetch(buildSnapshotUrl(resolvedShardPath), {
         cache: "force-cache",
       });
       if (response.status === 404 || !response.ok) {
