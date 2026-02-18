@@ -77,6 +77,7 @@ a:hover {
 .home-button,
 .help-button,
 .repo-button,
+.public-opinion-button,
 .robot-button,
 .theme-toggle {
   position: fixed;
@@ -102,10 +103,14 @@ a:hover {
 }
 
 .help-button {
-  right: 172px;
+  right: 224px;
 }
 
 .repo-button {
+  right: 172px;
+}
+
+.public-opinion-button {
   right: 120px;
 }
 
@@ -120,6 +125,7 @@ a:hover {
 .home-button:hover,
 .help-button:hover,
 .repo-button:hover,
+.public-opinion-button:hover,
 .robot-button:hover,
 .theme-toggle:hover {
   border-color: rgb(11 87 208 / 16%);
@@ -131,6 +137,7 @@ a:hover {
 .home-button:focus-visible,
 .help-button:focus-visible,
 .repo-button:focus-visible,
+.public-opinion-button:focus-visible,
 .robot-button:focus-visible,
 .theme-toggle:focus-visible {
   outline: 2px solid #7fb1ef;
@@ -235,6 +242,12 @@ a:hover {
   pointer-events: none;
   opacity: 1;
   transition: opacity 0.15s ease;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.search-input-layered.selection-active .search-input-highlight {
+  transform: translateX(var(--command-caret-offset, 0px));
 }
 
 .search-input-empty {
@@ -258,6 +271,13 @@ a:hover {
   font-size: 1rem;
   font-weight: 400;
   line-height: 1.25;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.search-input-native.has-selection::selection {
+  color: transparent;
+  background: rgb(130 170 235 / 42%);
 }
 
 .search-input-native.has-command-prefix {
@@ -284,6 +304,8 @@ a:hover {
   line-height: 1.25;
   font-weight: 400;
   white-space: pre;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 .search-command-measure-normal {
@@ -914,6 +936,7 @@ a:hover {
 :root[data-theme="dark"] .home-button,
 :root[data-theme="dark"] .help-button,
 :root[data-theme="dark"] .repo-button,
+:root[data-theme="dark"] .public-opinion-button,
 :root[data-theme="dark"] .robot-button,
 :root[data-theme="dark"] .theme-toggle {
   border-color: transparent;
@@ -925,6 +948,7 @@ a:hover {
 :root[data-theme="dark"] .home-button:hover,
 :root[data-theme="dark"] .help-button:hover,
 :root[data-theme="dark"] .repo-button:hover,
+:root[data-theme="dark"] .public-opinion-button:hover,
 :root[data-theme="dark"] .robot-button:hover,
 :root[data-theme="dark"] .theme-toggle:hover {
   border-color: rgb(214 220 230 / 20%);
@@ -936,6 +960,7 @@ a:hover {
 :root[data-theme="dark"] .home-button:focus-visible,
 :root[data-theme="dark"] .help-button:focus-visible,
 :root[data-theme="dark"] .repo-button:focus-visible,
+:root[data-theme="dark"] .public-opinion-button:focus-visible,
 :root[data-theme="dark"] .robot-button:focus-visible,
 :root[data-theme="dark"] .theme-toggle:focus-visible {
   outline-color: #c3c9d2;
@@ -969,6 +994,11 @@ a:hover {
 
 :root[data-theme="dark"] .search-input-shell input::placeholder {
   color: var(--search-placeholder-color);
+}
+
+:root[data-theme="dark"] .search-input-native.has-selection::selection {
+  color: transparent;
+  background: rgb(122 161 224 / 34%);
 }
 
 :root[data-theme="dark"] .search-input-shell button {
@@ -1116,6 +1146,7 @@ a:hover {
   .home-button,
   .help-button,
   .repo-button,
+  .public-opinion-button,
   .robot-button,
   .theme-toggle {
     position: fixed;
@@ -1130,10 +1161,14 @@ a:hover {
   }
 
   .help-button {
-    right: 156px;
+    right: 204px;
   }
 
   .repo-button {
+    right: 156px;
+  }
+
+  .public-opinion-button {
     right: 108px;
   }
 

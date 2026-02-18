@@ -160,6 +160,10 @@ function RepoLinkIcon() {
   return <IconMask fileName="code.svg" />;
 }
 
+function PublicOpinionIcon() {
+  return <IconMask fileName="public.svg" />;
+}
+
 function SearchIcon() {
   return <IconMask fileName="search.svg" className="search-button-icon" />;
 }
@@ -171,6 +175,7 @@ function ActionButtons({
   onGoHome,
   onOpenHelp,
   onOpenRepoShortcut,
+  onOpenPublicOpinion,
   onOpenRobot,
   onToggleTheme,
 }: {
@@ -180,6 +185,7 @@ function ActionButtons({
   onGoHome: () => void;
   onOpenHelp: () => void;
   onOpenRepoShortcut: () => void;
+  onOpenPublicOpinion: () => void;
   onOpenRobot: () => void;
   onToggleTheme: () => void;
 }) {
@@ -199,6 +205,15 @@ function ActionButtons({
         title="Repository"
       >
         <RepoLinkIcon />
+      </button>
+      <button
+        type="button"
+        className="public-opinion-button"
+        onClick={onOpenPublicOpinion}
+        aria-label="Public opinion"
+        title="Public opinion"
+      >
+        <PublicOpinionIcon />
       </button>
       <button type="button" className="robot-button" onClick={onOpenRobot} aria-label="GitHub" title="GitHub">
         <RobotIcon />
@@ -305,6 +320,12 @@ function SearchCommandInput({
     }
   }, [commandToken]);
 
+  function updateSelectionState(inputElement: HTMLInputElement): void {
+    const selectionStart = inputElement.selectionStart ?? 0;
+    const selectionEnd = inputElement.selectionEnd ?? 0;
+    setHasSelection(selectionEnd > selectionStart);
+  }
+
   function syncHighlightScroll(inputElement: HTMLInputElement): void {
     if (!highlightRef.current) {
       return;
@@ -312,8 +333,21 @@ function SearchCommandInput({
     highlightRef.current.scrollLeft = inputElement.scrollLeft;
   }
 
+  const [hasSelection, setHasSelection] = useState(false);
+  const inputClassName = [
+    "search-input-native",
+    commandToken.length > 0 ? "has-command-prefix" : "",
+    hasSelection ? "has-selection" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const commandCaretOffsetStyle = { "--command-caret-offset": `${commandCaretOffsetPx}px` } as CSSProperties;
+
   return (
-    <div className="search-input-layered">
+    <div
+      className={hasSelection ? "search-input-layered selection-active" : "search-input-layered"}
+      style={commandCaretOffsetStyle}
+    >
       <div className="search-input-highlight" aria-hidden="true" ref={highlightRef}>
         {value.length > 0 ? (
           highlightedSegments.map((segment, index) => (
@@ -326,18 +360,27 @@ function SearchCommandInput({
         )}
       </div>
       <input
-        className={commandToken.length > 0 ? "search-input-native has-command-prefix" : "search-input-native"}
+        className={inputClassName}
         type="text"
         value={value}
         placeholder={placeholder}
-        style={{ "--command-caret-offset": `${commandCaretOffsetPx}px` } as CSSProperties}
         onChange={(targetEvent) => {
           onChange(targetEvent.currentTarget.value);
           syncHighlightScroll(targetEvent.currentTarget);
+          updateSelectionState(targetEvent.currentTarget);
         }}
-        onFocus={onFocus}
-        onBlur={onBlur}
+        onFocus={(focusEvent) => {
+          onFocus();
+          updateSelectionState(focusEvent.currentTarget);
+        }}
+        onBlur={() => {
+          onBlur();
+          setHasSelection(false);
+        }}
         onKeyDown={onKeyDown}
+        onKeyUp={(keyEvent) => updateSelectionState(keyEvent.currentTarget)}
+        onMouseUp={(mouseEvent) => updateSelectionState(mouseEvent.currentTarget)}
+        onSelect={(selectEvent) => updateSelectionState(selectEvent.currentTarget)}
         onScroll={(targetEvent) => syncHighlightScroll(targetEvent.currentTarget)}
         autoFocus={autoFocus}
       />
@@ -1275,7 +1318,7 @@ function LookupResultSection({
       {showEmptyState ? (
         <section className="empty-state">
           <h2>No winners found</h2>
-          <p>This hackathon did not expose winning entries in the scanned data.</p>
+          <p>This hackathon did not list any winners.</p>
         </section>
       ) : null}
 
@@ -1583,8 +1626,8 @@ export default function App() {
     const parsedInput = parseSearchCommandInput(query);
     if (parsedInput.mode === "find") {
       const findQuery = parsedInput.queryText.trim() || suggestion.title;
-      applyLookupTargets(sortedSuggestions.length > 0 ? sortedSuggestions : [suggestion], {
-        queryValue: formatQueryForMode("find", findQuery, parsedInput.explicitCommand),
+      applyLookupTargets([suggestion], {
+        queryValue: formatQueryForMode("find", suggestion.title, parsedInput.explicitCommand),
         commandMode: "find",
         findQuery,
       });
@@ -1717,6 +1760,10 @@ export default function App() {
     window.open("https://github.com/aryan-cs/hackaplan", "_blank", "noopener,noreferrer");
   }
 
+  function handleOpenPublicOpinion(): void {
+    window.open("https://github.com/aryan-cs/hackaplan/issues", "_blank", "noopener,noreferrer");
+  }
+
   function handleOpenRobot(): void {
     window.open("https://github.com/aryan-cs/hackaplan", "_blank", "noopener,noreferrer");
   }
@@ -1732,6 +1779,7 @@ export default function App() {
         onGoHome={handleGoHome}
         onOpenHelp={handleOpenHelp}
         onOpenRepoShortcut={handleOpenRepoShortcut}
+        onOpenPublicOpinion={handleOpenPublicOpinion}
         onOpenRobot={handleOpenRobot}
         onToggleTheme={handleThemeToggle}
       />
@@ -1749,6 +1797,7 @@ export default function App() {
               onGoHome={handleGoHome}
               onOpenHelp={handleOpenHelp}
               onOpenRepoShortcut={handleOpenRepoShortcut}
+              onOpenPublicOpinion={handleOpenPublicOpinion}
               onOpenRobot={handleOpenRobot}
               onToggleTheme={handleThemeToggle}
             />
@@ -1816,6 +1865,7 @@ export default function App() {
                 onGoHome={handleGoHome}
                 onOpenHelp={handleOpenHelp}
                 onOpenRepoShortcut={handleOpenRepoShortcut}
+                onOpenPublicOpinion={handleOpenPublicOpinion}
                 onOpenRobot={handleOpenRobot}
                 onToggleTheme={handleThemeToggle}
               />
