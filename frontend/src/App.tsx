@@ -810,6 +810,17 @@ type FindPrizeMatch = {
   matchedPrizes: PrizeAward[];
 };
 
+function sortFindPrizeMatches(matches: FindPrizeMatch[]): FindPrizeMatch[] {
+  return [...matches].sort((left, right) => {
+    const leftYear = extractYearFromText(`${left.hackathonTitle} ${left.id}`) ?? -1;
+    const rightYear = extractYearFromText(`${right.hackathonTitle} ${right.id}`) ?? -1;
+    if (leftYear !== rightYear) {
+      return rightYear - leftYear;
+    }
+    return left.winner.project_title.localeCompare(right.winner.project_title, undefined, { sensitivity: "base" });
+  });
+}
+
 function FindTrackPrizeSection({
   query,
   snapshotManifest,
@@ -835,64 +846,68 @@ function FindTrackPrizeSection({
     let cancelled = false;
     const controller = new AbortController();
 
+    setMatches([]);
     setIsLoading(true);
     setLoadError(null);
 
     void (async () => {
-      try {
-        const allResults = await Promise.all(
-          FIND_TRACK_PRIZE_HACKATHONS.map(async (suggestion) => {
-            const result = await fetchFindHackathonResult(suggestion, snapshotManifest, liveLookupsEnabled, controller.signal);
-            return { suggestion, result };
-          }),
-        );
+      let completedCount = 0;
+      let firstError: string | null = null;
 
-        if (cancelled) {
-          return;
-        }
-
-        const nextMatches: FindPrizeMatch[] = [];
-        for (const item of allResults) {
-          if (!item.result) {
-            continue;
+      const tasks = FIND_TRACK_PRIZE_HACKATHONS.map(async (suggestion) => {
+        try {
+          const result = await fetchFindHackathonResult(suggestion, snapshotManifest, liveLookupsEnabled, controller.signal);
+          if (cancelled || !result) {
+            return;
           }
 
-          const hackathonTitle = item.result.hackathon.name || item.suggestion.title;
-          for (const winner of item.result.winners) {
+          const hackathonTitle = result.hackathon.name || suggestion.title;
+          const discoveredMatches: FindPrizeMatch[] = [];
+          for (const winner of result.winners) {
             const matchedPrizes = winner.prizes.filter((prize) => doesPrizeMatchFindQuery(prize.prize_name, query));
             if (matchedPrizes.length === 0) {
               continue;
             }
 
-            nextMatches.push({
-              id: `${item.result.hackathon.url}:${winner.project_url}`,
+            discoveredMatches.push({
+              id: `${result.hackathon.url}:${winner.project_url}`,
               hackathonTitle,
               winner,
               matchedPrizes,
             });
           }
-        }
 
-        nextMatches.sort((left, right) => {
-          const leftYear = extractYearFromText(`${left.hackathonTitle} ${left.id}`) ?? -1;
-          const rightYear = extractYearFromText(`${right.hackathonTitle} ${right.id}`) ?? -1;
-          if (leftYear !== rightYear) {
-            return rightYear - leftYear;
+          if (discoveredMatches.length === 0) {
+            return;
           }
-          return left.winner.project_title.localeCompare(right.winner.project_title, undefined, { sensitivity: "base" });
-        });
 
-        setMatches(nextMatches);
-      } catch (error) {
-        if (cancelled) {
-          return;
+          setMatches((previous) => {
+            const mergedById = new Map(previous.map((match) => [match.id, match]));
+            for (const match of discoveredMatches) {
+              mergedById.set(match.id, match);
+            }
+            return sortFindPrizeMatches(Array.from(mergedById.values()));
+          });
+        } catch (error) {
+          if (!cancelled && firstError === null) {
+            firstError = parseErrorMessage(error, "Failed to load /find prize matches.");
+          }
+        } finally {
+          if (cancelled) {
+            return;
+          }
+
+          completedCount += 1;
+          if (completedCount === FIND_TRACK_PRIZE_HACKATHONS.length) {
+            if (firstError) {
+              setLoadError(firstError);
+            }
+            setIsLoading(false);
+          }
         }
-        setLoadError(parseErrorMessage(error, "Failed to load /find prize matches."));
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
+      });
+
+      await Promise.allSettled(tasks);
     })();
 
     return () => {
